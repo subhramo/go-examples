@@ -3,14 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
-	// "github.com/google/go-github/v52/github"
-	// "golang.org/x/oauth2"
+
+	"github.com/google/go-github/v53/github"
+	"golang.org/x/oauth2"
 )
 
 func main() {
 	ctx := context.Background()
 	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: "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"},
+		&oauth2.Token{AccessToken: "xxxxx"},
 	)
 	tc := oauth2.NewClient(ctx, ts)
 
