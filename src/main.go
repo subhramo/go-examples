@@ -1,38 +1,60 @@
 package main
 
 import (
-	"context"
+	"bytes"
+	"flag"
 	"fmt"
-
-	"github.com/google/go-github/v53/github"
-	"golang.org/x/oauth2"
+	"io/ioutil"
+	"log"
+	"net/http"
 )
 
-func main() {
-	ctx := context.Background()
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: "xxxxx"},
-	)
-	tc := oauth2.NewClient(ctx, ts)
+const (
+	Url   = "https://api.github.com/repos/subhramo/go-examples/pulls"
+	Token = "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"
+)
 
-	client := github.NewClient(tc)
+func makeRequest(url, token, email, jiraID string) (*http.Response, error) {
+	jsonData := fmt.Sprintf(`{"title":"Amazing new feature","body":"Pull request for Jira ID: %s by %s","head":"feature","base":"main"}`, jiraID, email)
 
-	// Define pull request parameters
-	newPR := &github.NewPullRequest{
-		Title:               github.String("Pull Request Title"),
-		Head:                github.String("BranchName"), // e.g., "feature-branch"
-		Base:                github.String("main"),       // Typically "main" or "master"
-		Body:                github.String("Pull request description."),
-		MaintainerCanModify: github.Bool(true),
-	}
-
-	// Create the pull request
-	pr, _, err := client.PullRequests.Create(ctx, "<Owner>", "<Repo>", newPR)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer([]byte(jsonData)))
 	if err != nil {
-		fmt.Printf("Error while creating the pull request: %v\n", err)
-		return
+		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
-	// Print the created pull request
-	fmt.Printf("Created PR: %v\n", pr)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error making request: %v", err)
+	}
+
+	return resp, nil
+}
+
+func main() {
+	email := flag.String("email", "", "Email to use in the pull request")
+	jiraID := flag.String("jiraID", "", "Jira ID to use in the pull request")
+
+	flag.Parse()
+
+	if *email == "" || *jiraID == "" {
+		log.Fatalf("You must provide an email and Jira ID.")
+	}
+
+	resp, err := makeRequest(Url, Token, *email, *jiraID)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Error reading response body: %v", err)
+	}
+
+	fmt.Println("Response body: ", string(body))
 }
