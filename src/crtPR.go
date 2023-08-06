@@ -11,7 +11,7 @@ import (
 
 const (
 	Url   = "https://api.github.com/repos/subhramo/go-examples/pulls"
-	Token = "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"
+	Token = "xxxxxx"
 )
 
 func makeRequest(url, token, email, jiraID string) (*http.Response, error) {
