@@ -1,53 +1,75 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
+
+	jira "github.com/andygrunwald/go-jira"
 )
 
-type JiraComment struct {
-	Body string `json:"body"`
+type CommentRequest struct {
+	IssueID     string `json:"issue_id"`
+	CommentBody string `json:"comment_body"`
 }
 
-func AddCommentToJiraTicket(client *http.Client, jiraURL, issueID, comment string) error {
-	// Construct the comment payload
-	payload := JiraComment{
-		Body: comment,
+func getJiraClient() *jira.Client {
+	tp := jira.BasicAuthTransport{
+		Username: "yourUsername",
+		Password: "yourPassword",
 	}
 
-	jsonPayload, err := json.Marshal(payload)
+	client, err := jira.NewClient(tp.Client(), "https://your.jira.instance.url/")
 	if err != nil {
-		return err
+		log.Fatalf("Error initializing Jira client: %v", err)
 	}
-
-	// Construct the request to add a comment
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/rest/api/2/issue/%s/comment", jiraURL, issueID), bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	// Send the request
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("failed to add comment to Jira ticket: %s", resp.Status)
-	}
-
-	return nil
+	return client
 }
 
-// Sample usage:
-// Assuming you have an authenticated http.Client from another function
-// client := authenticateJira()  // This function should authenticate and return an http.Client
-// err := AddCommentToJiraTicket(client, "https://your.jira.domain", "ISSUE-123", "This is a new comment")
-// if err != nil {
-//     fmt.Println("Error adding comment:", err)
-// }
+func AddCommentToJiraTicket(jiraClient *jira.Client, issueID, commentBody string) error {
+	comment := &jira.Comment{
+		Body: commentBody,
+	}
+
+	_, _, err := jiraClient.Issue.AddComment(issueID, comment)
+	return err
+}
+
+func handleComment(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST method is supported", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		http.Error(w, "Error reading request body", http.StatusInternalServerError)
+		return
+	}
+
+	var req CommentRequest
+	err = json.Unmarshal(body, &req)
+	if err != nil {
+		http.Error(w, "Error unmarshaling JSON", http.StatusBadRequest)
+		return
+	}
+
+	jiraClient := getJiraClient()
+	err = AddCommentToJiraTicket(jiraClient, req.IssueID, req.CommentBody)
+	if err != nil {
+		http.Error(w, "Error adding comment to Jira", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintf(w, "Successfully added comment to issue: %s", req.IssueID)
+}
+
+func main() {
+	http.HandleFunc("/add-comment", handleComment)
+
+	log.Println("Server started on :8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
